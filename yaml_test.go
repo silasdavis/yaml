@@ -180,11 +180,8 @@ func TestUnmarshalErrors(t *testing.T) {
 			continue
 		}
 		// We only expect errors during unmarshalling YAML.
-		if want := "yaml: unmarshal errors"; tc.wantErr != "" && !strings.Contains(err.Error(), want) {
-			t.Errorf("UnmarshalStrict(%#q, &s) = %v; want err contains %#q", string(tc.yaml), err, want)
-		}
 		if tc.wantErr != "" && !strings.Contains(err.Error(), tc.wantErr) {
-			t.Errorf("UnmarshalStrict(%#q, &s) = %v; want err contains %#q", string(tc.yaml), err, tc.wantErr)
+			t.Errorf("UnmarshalStrict(%#q, &s) = %q; want err contains %#q", string(tc.yaml), err, tc.wantErr)
 		}
 
 		// Even if there was an error, we continue the test: We expect that all
@@ -234,59 +231,79 @@ func TestYAMLToJSON(t *testing.T) {
 			"t: a\n",
 			`{"t":"a"}`,
 			nil,
-		}, {
+		},
+		{
 			"t: \n",
 			`{"t":null}`,
 			strPtr("t: null\n"),
-		}, {
+		},
+		{
 			"t: null\n",
 			`{"t":null}`,
 			nil,
-		}, {
+		},
+		{
 			"1: a\n",
 			`{"1":"a"}`,
 			strPtr("\"1\": a\n"),
-		}, {
+		},
+		{
 			"1000000000000000000000000000000000000: a\n",
 			`{"1e+36":"a"}`,
 			strPtr("\"1e+36\": a\n"),
-		}, {
+		},
+		{
 			"1e+36: a\n",
 			`{"1e+36":"a"}`,
 			strPtr("\"1e+36\": a\n"),
-		}, {
+		},
+		{
 			"\"1e+36\": a\n",
 			`{"1e+36":"a"}`,
 			nil,
-		}, {
+		},
+		{
 			"\"1.2\": a\n",
 			`{"1.2":"a"}`,
 			nil,
-		}, {
+		},
+		{
 			"- t: a\n",
 			`[{"t":"a"}]`,
 			nil,
-		}, {
+		},
+		{
 			"- t: a\n" +
 				"- t:\n" +
 				"      b: 1\n" +
 				"      c: 2\n",
 			`[{"t":"a"},{"t":{"b":1,"c":2}}]`,
 			nil,
-		}, {
-			`[{t: a}, {t: {b: 1, c: 2}}]`,
+		},
+		{
+			`[{t: a},
+{t: {b: 1, c: 2}}]`,
 			`[{"t":"a"},{"t":{"b":1,"c":2}}]`,
 			strPtr("- t: a\n" +
 				"- t:\n" +
 				"      b: 1\n" +
 				"      c: 2\n"),
-		}, {
+		},
+		{
 			"- t: \n",
 			`[{"t":null}]`,
 			strPtr("- t: null\n"),
-		}, {
+		},
+		{
 			"- t: null\n",
 			`[{"t":null}]`,
+			nil,
+		},
+		{
+			"obj:\n" +
+				"    z_hello: hello\n" +
+				"    a_world: world\n",
+			`{"obj":{"z_hello":"hello","a_world":"world"}}`,
 			nil,
 		},
 	}
@@ -324,38 +341,40 @@ func runCases(t *testing.T, runType RunType, cases []Case) {
 		invMsg = "JSON back to YAML"
 	}
 
-	for _, c := range cases {
-		// Convert the string.
-		t.Logf("converting %s\n", c.input)
-		output, err := f([]byte(c.input))
-		if err != nil {
-			t.Errorf("Failed to convert %s, input: `%s`, err: %v", msg, c.input, err)
-		}
+	for i, c := range cases {
+		t.Run(fmt.Sprintf("%s-%d", msg, i), func(t *testing.T) {
+			// Convert the string.
+			t.Logf("converting %s\n", c.input)
+			output, err := f([]byte(c.input))
+			if err != nil {
+				t.Errorf("Failed to convert %s, input: `%s`, err: %v", msg, c.input, err)
+			}
 
-		// Check it against the expected output.
-		if string(output) != c.output {
-			t.Errorf("Failed to convert %s, input: `%s`, expected `%s`, got `%s`",
-				msg, c.input, c.output, string(output))
-		}
+			// Check it against the expected output.
+			if string(output) != c.output {
+				t.Errorf("Failed to convert %s, input: `%s`, expected `%s`, got `%s`",
+					msg, c.input, c.output, string(output))
+			}
 
-		// Set the string that we will compare the reversed output to.
-		reverse := c.input
-		// If a special reverse string was specified, use that instead.
-		if c.reverse != nil {
-			reverse = *c.reverse
-		}
+			// Set the string that we will compare the reversed output to.
+			reverse := c.input
+			// If a special reverse string was specified, use that instead.
+			if c.reverse != nil {
+				reverse = *c.reverse
+			}
 
-		// Reverse the output.
-		input, err := invF(output)
-		if err != nil {
-			t.Errorf("Failed to convert %s, input: `%s`, err: %v", invMsg, string(output), err)
-		}
+			// Reverse the output.
+			input, err := invF(output)
+			if err != nil {
+				t.Errorf("Failed to convert %s, input: `%s`, err: %v", invMsg, string(output), err)
+			}
 
-		// Check the reverse is equal to the input (or to *c.reverse).
-		if string(input) != reverse {
-			t.Errorf("Failed to convert %s, input: `%s`, expected `%s`, got `%s`",
-				invMsg, string(output), reverse, string(input))
-		}
+			// Check the reverse is equal to the input (or to *c.reverse).
+			if string(input) != reverse {
+				t.Errorf("Failed to convert %s, input: `%s`, expected `%s`, got `%s`",
+					invMsg, string(output), reverse, string(input))
+			}
+		})
 	}
 }
 
